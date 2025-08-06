@@ -22,7 +22,18 @@ matplotlib.use("Agg")  # Agg is a non-interactive backend
 import numpy as np
 import torch
 from natsort import natsorted
-from openslide import OpenSlide
+try:
+    from openslide import OpenSlide, OpenSlideUnsupportedFormatError
+except Exception:  # pragma: no cover - openslide optional
+    OpenSlide = None
+
+    class OpenSlideUnsupportedFormatError(Exception):
+        pass
+
+from preprocessing.patch_extraction.src.utils.tiffslide import (
+    DeepZoomGeneratorTiff,
+    TiffSlide,
+)
 from PIL import Image
 from shapely.affinity import scale
 from shapely.geometry import Polygon
@@ -161,6 +172,20 @@ class PreProcessor(object):
         logger.info(f"Annotations found: {len(self.annotation_files)}")
         if len(self.config.exclude_classes) != 0:
             logger.warning(f"Excluding classes: {self.config.exclude_classes}")
+
+    def _open_slide(self, wsi_file: Union[str, Path]):
+        """Open a slide with OpenSlide and fall back to a generic TIFF loader."""
+
+        try:
+            if OpenSlide is None:
+                raise OpenSlideUnsupportedFormatError("OpenSlide not available")
+            slide = OpenSlide(str(wsi_file))
+            slide_cu = self.image_loader(str(wsi_file))
+        except Exception:
+            slide = TiffSlide(str(wsi_file))
+            slide_cu = slide
+            self.deepzoomgenerator = DeepZoomGeneratorTiff
+        return slide, slide_cu
 
     @staticmethod
     def setup_output_path(output_path: Union[str, Path]) -> None:
@@ -588,8 +613,7 @@ class PreProcessor(object):
         logger.info(f"Computing patches for {wsi_file.name}")
 
         # load slide (OS and CuImage/OS)
-        slide = OpenSlide(str(wsi_file))
-        slide_cu = self.image_loader(str(wsi_file))
+        slide, slide_cu = self._open_slide(wsi_file)
         if "openslide.mpp-x" in slide.properties:
             slide_mpp = float(slide.properties.get("openslide.mpp-x"))
         elif (
@@ -632,7 +656,7 @@ class PreProcessor(object):
             )
         # target mag has precedence before downsample!
         elif self.config.target_mag is not None:
-            self.config.downsample = target_mag_to_downsample(
+            self.config.downsample, self.rescaling_factor = target_mag_to_downsample(
                 slide_properties["magnification"],
                 self.config.target_mag,
             )
@@ -784,8 +808,7 @@ class PreProcessor(object):
         context_tiles = {}
 
         # reload image
-        slide = OpenSlide(str(wsi_file))
-        slide_cu = self.image_loader(str(wsi_file))
+        slide, slide_cu = self._open_slide(wsi_file)
 
         tile_size, overlap = patch_to_tile_size(
             self.config.patch_size, self.config.patch_overlap, self.rescaling_factor
@@ -1004,8 +1027,7 @@ class PreProcessor(object):
         # batch = [item for sublist in divided for item in sublist]
 
         # open slide
-        slide = OpenSlide(str(wsi_file))
-        slide_cu = self.image_loader(str(wsi_file))
+        slide, slide_cu = self._open_slide(wsi_file)
         tile_size = patch_to_tile_size(
             self.config.patch_size, self.config.patch_overlap
         )

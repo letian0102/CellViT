@@ -11,7 +11,13 @@ from pathlib import Path
 from typing import Dict, List, Tuple, Union
 
 import numpy as np
-from openslide import OpenSlide
+try:
+    from openslide import OpenSlide, OpenSlideUnsupportedFormatError
+except Exception:  # pragma: no cover - openslide optional
+    OpenSlide = None
+
+    class OpenSlideUnsupportedFormatError(Exception):
+        pass
 from PIL import Image
 from shapely.geometry import Polygon
 from preprocessing.patch_extraction import logger
@@ -23,6 +29,10 @@ from preprocessing.patch_extraction.src.utils.patch_util import (
     pad_tile,
     patch_to_tile_size,
     standardize_brightness,
+)
+from preprocessing.patch_extraction.src.utils.tiffslide import (
+    DeepZoomGeneratorTiff,
+    TiffSlide,
 )
 from utils.tools import module_exists
 
@@ -115,8 +125,15 @@ def process_batch(
         generator_module = DeepZoomGeneratorOS
         image_loader = OpenSlide
 
-    slide = OpenSlide(str(wsi_file))
-    slide_cu = image_loader(str(wsi_file))
+    try:
+        if OpenSlide is None:
+            raise OpenSlideUnsupportedFormatError("OpenSlide not available")
+        slide = OpenSlide(str(wsi_file))
+        slide_cu = image_loader(str(wsi_file))
+    except Exception:
+        slide = TiffSlide(str(wsi_file))
+        slide_cu = slide
+        generator_module = DeepZoomGeneratorTiff
     tile_size = patch_to_tile_size(patch_size, patch_overlap)
 
     tiles = generator_module(

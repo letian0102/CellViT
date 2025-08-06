@@ -31,6 +31,7 @@ class TiffSlide:
         return Image.fromarray(region)
 
     def get_thumbnail(self, size):
+        size = tuple(int(round(s)) for s in size)
         return Image.fromarray(self._array).resize(size, Image.BILINEAR)
 
     def close(self):

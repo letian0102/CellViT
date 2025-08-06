@@ -15,9 +15,19 @@ from typing import Generator, List, Tuple, Union
 import cv2
 import geojson
 import numpy as np
-import openslide
-from openslide import OpenSlide
-from openslide.deepzoom import DeepZoomGenerator
+try:
+    import openslide
+    from openslide import OpenSlide
+    from openslide.deepzoom import DeepZoomGenerator
+except Exception:  # pragma: no cover - openslide optional
+    class OpenSlide:  # type: ignore
+        pass
+
+    class DeepZoomGenerator:  # type: ignore
+        pass
+
+    class openslide:  # type: ignore
+        OpenSlide = OpenSlide
 from PIL import Image, ImageDraw
 from rasterio.features import rasterize
 from shapely.affinity import translate

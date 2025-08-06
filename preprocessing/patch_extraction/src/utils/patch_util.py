@@ -119,10 +119,11 @@ def patch_to_tile_size(
     return patch_size - overlap * 2, overlap
     #return patch_size, overlap
 
-def target_mag_to_downsample(base_mag: float, target_mag: float) -> int:
-    """Convert the target magnification to a specific downsampling factor based on the base magnification of an image.
+def target_mag_to_downsample(base_mag: float, target_mag: float) -> Tuple[int, float]:
+    """Convert the target magnification to a downsampling factor and rescaling factor.
 
-    Resulting downsampling factor must be a power of 2
+    If the requested magnification is higher than the available slide magnification, the slide
+    is upsampled by the returned rescaling factor.
 
     Args:
         base_mag (float): Base magnification of WSI
@@ -132,25 +133,34 @@ def target_mag_to_downsample(base_mag: float, target_mag: float) -> int:
         WrongParameterException: Raised when calculating error occurs
 
     Returns:
-        int: Resulting downsampling
+        Tuple[int, float]: Resulting downsampling and rescaling factors
 
     Examples:
         The target magnification is 5 and the base magnification is 40. Then the downsampling
-        factor is 40/5 = 8. The downsampling factor must be a power of 2
+        factor is 40/5 = 8. The downsampling factor must be a power of 2.
     """
     try:
         base_mag = int(round(base_mag))
         if target_mag is not None:
-            if np.log2((base_mag / target_mag)).is_integer():
-                downsample = int(base_mag / target_mag)
+            if base_mag >= target_mag:
+                if np.log2((base_mag / target_mag)).is_integer():
+                    downsample = int(base_mag / target_mag)
+                    rescaling_factor = 1.0
+                else:
+                    raise WrongParameterException(
+                        "Cannot derive downsampling, because base/target must be a power of 2",
+                    )
             else:
-                raise WrongParameterException(
-                    "Cannot derive downsampling, because base/target must be a power of 2"
+                logger.warning(
+                    f"Requested magnification ({target_mag}) is higher than the base magnification {base_mag}. "
+                    "We perform rescaling, but this may not be accurate and is very slow!",
                 )
+                downsample = 1
+                rescaling_factor = base_mag / target_mag
     except KeyError:
         raise WrongParameterException("No base magnification in metadata")
 
-    return downsample
+    return downsample, rescaling_factor
 
 
 def target_mpp_to_downsample(

@@ -656,7 +656,7 @@ class PreProcessor(object):
             )
         # target mag has precedence before downsample!
         elif self.config.target_mag is not None:
-            self.config.downsample = target_mag_to_downsample(
+            self.config.downsample, self.rescaling_factor = target_mag_to_downsample(
                 slide_properties["magnification"],
                 self.config.target_mag,
             )
